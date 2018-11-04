@@ -1,0 +1,4 @@
+name = Create huge users
+description = custom module fot creating a lot of numbers users from file
+version = 7.x-1.x-dev
+core = 7.x

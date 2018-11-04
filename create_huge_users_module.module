@@ -1,0 +1,115 @@
+<?php
+define('PASS_LENGTH', 5);
+define('FOUT_PATH', '/home/anton/Документы/');
+/* hook menu */
+
+function create_huge_users_module_menu() {
+    $items = array();
+    $items['create-huge-users-page'] = array (
+	'title' => 'Create Users - Создать пользователей',
+	'page callback' => 'drupal_get_form',
+	'page arguments' => array('create_huge_users_page_form'),
+	'access callback' => TRUE,
+    );
+    return $items;
+}
+
+/*create users form*/
+function create_huge_users_page_form($form, $form_state){
+    $form = array();
+    $form['file'] = array(
+	'#type' => 'file',
+	'#title' => t('Choose file - Выберите файл'),
+	'#size' => 60,
+    );
+    $form['submit'] = array(
+	'#type' => 'submit',
+	'#value' => t('Create - Создать'),
+    );
+    return $form;
+}
+
+/*validate function*/
+
+function create_huge_users_page_form_validate($form, &$form_state)
+{
+    $validators = array(
+	'file_validate_extensions' => array('csv txt xls'),
+    );
+
+    if ($file = file_save_upload('file', $validators, 'public://'))
+    {
+	$form_state['values']['file'] = $file;
+    }
+    else
+    {
+	form_set_error('file', t('File is not load - Файл не загружен'));
+    }
+}
+
+/*submit function*/
+function create_huge_users_page_form_submit($form, &$form_state)
+{
+    $file = $form_state['values']['file'];
+    $filename = $file->filename;
+    $users = array();
+    $fp = fopen('public://'.$filename, "r");
+    if ($fp)
+    {
+	while (!feof($fp))
+	{
+	    $users[] = fgetcsv($fp);
+	}
+    }
+    fclose($fp);
+    file_delete($file);
+    $path = FOUT_PATH . 'Пароли_' . date('d_m_Y') . '.csv';
+    $fout = fopen($path, 'w');
+    $user_save_array = array();
+    foreach($users as $user) {
+	$u = user_load_by_name($user[0]);
+	if (!$u) {
+	    $user_save_array['name'] = $user[0];
+	    $user_save_array['pass'] = createPass();
+	    $user_save_array['status'] = 1;
+	    $user_save_array['roles'] = createRoles($user[1]);
+	    $user_save_array['field_org_2'] = createOrg($user[2]);
+	    $user_save_array['field_position'] = array(LANGUAGE_NONE => array(array('value' => $user[3])));
+	    $user_save_array['field_unit'] = array(LANGUAGE_NONE => array(array('value' => $user[4])));
+	    user_save(NULL, $user_save_array);
+	    fputcsv($fout, array($user_save_array['name'], $user_save_array['pass'],));
+	} else {
+	    fputcsv($fout, array($user[0], 'Пользователь был создан ранее'));
+	}
+    }
+    fclose($fout);
+    drupal_set_message('Пользователи успешно созданы. Файл с логинами и паролями находится в ' . $path);
+}
+
+function createPass() {
+    $result = '';
+    for ($i = 1; $i <= PASS_LENGTH; $i++)
+	$result = $result . rand(0,9);
+    return $result;
+}
+
+function createRoles($name) {
+    $sql = 'SELECT rid FROM role WHERE name = \'' . $name . '\'';
+    $res = db_query($sql);
+    $result = array(DRUPAL_AUTHENTICATED_RID => TRUE);
+    foreach($res as $r) {
+	$result[$r->rid] = $name;
+    }
+    return $result;
+}
+
+function createOrg($name) {
+    $sql = 'SELECT tid FROM taxonomy_term_data WHERE name = \'' . $name . '\'';
+    $res = db_query($sql);
+    $result = array();
+    foreach($res as $r) {
+	$result[LANGUAGE_NONE] = array(array('tid' => $r->tid));
+    }
+    return $result;
+
+}
